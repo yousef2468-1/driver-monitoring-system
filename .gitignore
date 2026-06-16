@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Model weights (large files — use Git LFS or share separately)
+models/weights/*.pt
+models/weights/*.onnx
+*.weights
+
+# Datasets
+data/raw/
+data/datasets/
+*.zip
+*.tar.gz
+
+# Notebooks output
+notebooks/.ipynb_checkpoints/
+runs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+
+# Env
+.env
+*.env
+
+# Streamlit
+.streamlit/secrets.toml

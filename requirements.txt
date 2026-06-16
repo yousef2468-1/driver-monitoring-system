@@ -1,0 +1,14 @@
+ultralytics
+mediapipe
+opencv-python
+streamlit
+numpy
+Pillow
+scipy
+pygame
+pandas
+matplotlib
+seaborn
+scikit-learn
+tqdm
+pyyaml
