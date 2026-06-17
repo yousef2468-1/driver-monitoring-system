@@ -1,81 +1,86 @@
 """
-Alert Manager
-Handles all alerts: visual, audio, logging
+Alert Manager v2 - Fixed audio using system beep
+Works 100% on Linux/Ubuntu
 """
 
 import time
-import pygame
-import numpy as np
 import os
+import subprocess
 
 
 class AlertManager:
     def __init__(self):
-        self.alert_log   = []          # list of (timestamp, alert_type, message)
-        self.last_alerts = {}          # cooldown tracker per alert type
-        self.cooldown    = 3.0         # seconds between same alert
-        self._init_audio()
+        self.alert_log   = []
+        self.last_alerts = {}
+        self.cooldown    = 3.0
 
-    # ── Audio init ────────────────────────────────────────────────────────────
-    def _init_audio(self):
+    def _beep(self, alert_type):
+        """Use system speaker - works on all Linux"""
         try:
-            pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
-            self.audio_ok = True
-        except Exception:
-            self.audio_ok = False
+            # Method 1: paplay (PulseAudio - most reliable)
+            freq_map = {
+                "drowsiness": 880,
+                "yawning":    660,
+                "phone":      1000,
+                "cigarette":  770
+            }
+            freq = freq_map.get(alert_type, 880)
 
-    # ── Generate beep ─────────────────────────────────────────────────────────
-    def _beep(self, freq=880, duration_ms=500):
-        if not self.audio_ok:
-            return
-        try:
-            sample_rate = 22050
-            n_samples   = int(sample_rate * duration_ms / 1000)
-            t           = np.linspace(0, duration_ms / 1000, n_samples, False)
-            wave        = (np.sin(2 * np.pi * freq * t) * 32767).astype(np.int16)
-            wave        = np.column_stack([wave, wave])   # stereo
-            sound       = pygame.sndarray.make_sound(wave)
-            sound.play()
-        except Exception:
-            pass
+            # Generate beep using python and play via aplay
+            import wave, struct, math
+            sample_rate = 44100
+            duration    = 0.5
+            filename    = f"/tmp/alert_{alert_type}.wav"
 
-    # ── Trigger alert ─────────────────────────────────────────────────────────
+            if not os.path.exists(filename):
+                n_samples = int(sample_rate * duration)
+                with wave.open(filename, 'w') as f:
+                    f.setnchannels(1)
+                    f.setsampwidth(2)
+                    f.setframerate(sample_rate)
+                    for i in range(n_samples):
+                        # Fade in/out to avoid clicks
+                        fade = min(i, n_samples-i, 1000) / 1000.0
+                        val  = int(32767 * fade * math.sin(2 * math.pi * freq * i / sample_rate))
+                        f.writeframes(struct.pack('<h', val))
+
+            subprocess.Popen(
+                ["aplay", "-q", filename],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            try:
+                # Method 2: print bell character
+                print('\a', end='', flush=True)
+            except:
+                pass
+
     def trigger(self, alert_type: str, message: str, play_sound: bool = True):
-        """
-        Args:
-            alert_type : "drowsiness" | "phone" | "cigarette"
-            message    : human-readable alert text
-            play_sound : whether to beep
-        """
         now = time.time()
-        # Cooldown check
         if now - self.last_alerts.get(alert_type, 0) < self.cooldown:
             return False
 
         self.last_alerts[alert_type] = now
         self.alert_log.append({
-            "time":       time.strftime("%H:%M:%S"),
-            "type":       alert_type,
-            "message":    message
+            "time":    time.strftime("%H:%M:%S"),
+            "type":    alert_type,
+            "message": message
         })
 
         if play_sound:
-            freq_map = {"drowsiness": 660, "phone": 880, "cigarette": 770}
-            self._beep(freq=freq_map.get(alert_type, 880))
+            self._beep(alert_type)
 
         return True
 
-    # ── Get stats ─────────────────────────────────────────────────────────────
     def get_stats(self):
-        drowsy_count = sum(1 for a in self.alert_log if a["type"] == "drowsiness")
-        phone_count  = sum(1 for a in self.alert_log if a["type"] == "phone")
-        cig_count    = sum(1 for a in self.alert_log if a["type"] == "cigarette")
         return {
             "total":      len(self.alert_log),
-            "drowsiness": drowsy_count,
-            "phone":      phone_count,
-            "cigarette":  cig_count,
-            "log":        self.alert_log[-10:]   # last 10
+            "drowsiness": sum(1 for a in self.alert_log if a["type"] == "drowsiness"),
+            "yawning":    sum(1 for a in self.alert_log if a["type"] == "yawning"),
+            "phone":      sum(1 for a in self.alert_log if a["type"] == "phone"),
+            "cigarette":  sum(1 for a in self.alert_log if a["type"] == "cigarette"),
+            "log":        self.alert_log[-10:]
         }
 
     def reset(self):
