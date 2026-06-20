@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Driver Monitoring System</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #1F3864, #2E75B6);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header p  { font-size: 11px; opacity: 0.8; }
+    .header-score {
+      text-align: center;
+      background: rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding: 6px 14px;
+    }
+    .header-score .score-num { font-size: 24px; font-weight: 800; }
+    .header-score .score-lbl { font-size: 11px; opacity: 0.9; }
+
+    /* ── Video feed ── */
+    .video-container {
+      position: relative;
+      width: 100%;
+      background: #111;
+    }
+    #resultCanvas {
+      width: 100%;
+      display: block;
+    }
+    #hiddenVideo {
+      display: none;
+    }
+    .video-overlay {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .fps-badge {
+      position: absolute;
+      top: 10px; right: 10px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    /* ── Alert banner ── */
+    .alert-banner {
+      display: none;
+      background: #ff3333;
+      color: white;
+      text-align: center;
+      padding: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      animation: pulse 0.5s infinite alternate;
+    }
+    .alert-banner.show { display: block; }
+    @keyframes pulse {
+      from { background: #ff3333; }
+      to   { background: #cc0000; }
+    }
+
+    /* ── Status grid ── */
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px;
+    }
+    .status-card {
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.3s ease;
+    }
+    .status-card.safe    { background: #0d2e1a; border: 1.5px solid #00cc66; }
+    .status-card.danger  { background: #2e0d0d; border: 1.5px solid #ff4444;
+                           animation: cardPulse 0.8s infinite alternate; }
+    .status-card.warning { background: #2e1e0d; border: 1.5px solid #ff8800; }
+    @keyframes cardPulse {
+      from { box-shadow: 0 0 0px #ff4444; }
+      to   { box-shadow: 0 0 12px #ff4444; }
+    }
+    .status-icon { font-size: 24px; }
+    .status-info .label { font-size: 12px; opacity: 0.7; }
+    .status-info .value { font-size: 14px; font-weight: 700; }
+    .status-card.safe    .value { color: #00cc66; }
+    .status-card.danger  .value { color: #ff4444; }
+    .status-card.warning .value { color: #ff8800; }
+
+    /* ── Metrics row ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 0 10px 10px;
+    }
+    .metric {
+      background: #1a1a2e;
+      border-radius: 10px;
+      padding: 8px;
+      text-align: center;
+    }
+    .metric .val { font-size: 18px; font-weight: 800; color: #4fc3f7; }
+    .metric .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+
+    /* ── Controls ── */
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0 10px 10px;
+    }
+    .btn {
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-start  { background: linear-gradient(135deg, #00cc66, #009944); color: white; }
+    .btn-stop   { background: linear-gradient(135deg, #ff4444, #cc0000); color: white; }
+    .btn-reset  { background: linear-gradient(135deg, #2E75B6, #1F3864); color: white; }
+    .btn-flip   { background: linear-gradient(135deg, #555, #333); color: white; }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.5; }
+
+    /* ── Alert log ── */
+    .alert-log {
+      margin: 0 10px 10px;
+      background: #111;
+      border-radius: 12px;
+      padding: 10px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .alert-log h3 { font-size: 12px; color: #888; margin-bottom: 6px; }
+    .log-entry {
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid #222;
+      display: flex;
+      gap: 8px;
+    }
+    .log-time { color: #888; min-width: 55px; }
+
+    /* ── Connection status ── */
+    .conn-status {
+      text-align: center;
+      padding: 6px;
+      font-size: 12px;
+      background: #1a1a1a;
+    }
+    .conn-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .conn-dot.connected    { background: #00cc66; }
+    .conn-dot.disconnected { background: #ff4444; }
+    .conn-dot.processing   { background: #ff8800; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 10px;
+      font-size: 11px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <h1>🚗 Driver Monitor</h1>
+    <p>Cairo University · FCAI · AI 2026</p>
+  </div>
+  <div class="header-score">
+    <div class="score-num" id="scoreNum">100</div>
+    <div class="score-lbl">Grade <span id="gradeSpan">A</span></div>
+  </div>
+</div>
+
+<!-- Connection status -->
+<div class="conn-status">
+  <span class="conn-dot disconnected" id="connDot"></span>
+  <span id="connText">Not connected</span>
+</div>
+
+<!-- Alert banner -->
+<div class="alert-banner" id="alertBanner">⚠️ ALERT</div>
+
+<!-- Video -->
+<div class="video-container">
+  <video id="hiddenVideo" autoplay playsinline muted></video>
+  <canvas id="resultCanvas"></canvas>
+  <div class="video-overlay" id="statusOverlay">📷 Camera ready</div>
+  <div class="fps-badge" id="fpsBadge">-- FPS</div>
+</div>
+
+<!-- Status cards -->
+<div class="status-grid">
+  <div class="status-card safe" id="card-drowsy">
+    <div class="status-icon">👁️</div>
+    <div class="status-info">
+      <div class="label">Drowsiness</div>
+      <div class="value" id="val-drowsy">Alert</div>
+    </div>
+  </div>
+  <div class="status-card safe" id="card-yawn">
+    <div class="status-icon">😐</div>
+    <div class="status-info">
+      <div class="label">Yawning</div>
+      <div class="value" id="val-yawn">Normal</div>
+    </div>
+  </div>
+  <div class="status-card safe" id="card-phone">
+    <div class="status-icon">📵</div>
+    <div class="status-info">
+      <div class="label">Phone</div>
+      <div class="value" id="val-phone">No Phone</div>
+    </div>
+  </div>
+  <div class="status-card safe" id="card-cig">
+    <div class="status-icon">✅</div>
+    <div class="status-info">
+      <div class="label">Smoking</div>
+      <div class="value" id="val-cig">No Smoke</div>
+    </div>
+  </div>
+</div>
+
+<!-- Metrics -->
+<div class="metrics">
+  <div class="metric">
+    <div class="val" id="earVal">0.00</div>
+    <div class="lbl">EAR</div>
+  </div>
+  <div class="metric">
+    <div class="val" id="marVal">0.00</div>
+    <div class="lbl">MAR</div>
+  </div>
+  <div class="metric">
+    <div class="val" id="yawnVal">0</div>
+    <div class="lbl">Yawns</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button class="btn btn-start" id="btnStart" onclick="startMonitoring()">▶️ Start</button>
+  <button class="btn btn-stop"  id="btnStop"  onclick="stopMonitoring()" disabled>⏹ Stop</button>
+  <button class="btn btn-flip"  onclick="flipCamera()">🔄 Flip Cam</button>
+  <button class="btn btn-reset" onclick="resetSession()">↺ Reset</button>
+</div>
+
+<!-- Alert log -->
+<div class="alert-log">
+  <h3>📋 Alert Log</h3>
+  <div id="logContainer"></div>
+</div>
+
+<div class="footer">Driver Monitoring System — Cairo University FCAI 2026</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  const socket   = io();
+  let stream     = null;
+  let running    = false;
+  let facingMode = 'user';   // front camera by default
+  let frameCount = 0;
+  let lastFps    = Date.now();
+  let alertTimer = null;
+
+  const video    = document.getElementById('hiddenVideo');
+  const canvas   = document.getElementById('resultCanvas');
+  const ctx      = canvas.getContext('2d');
+
+  // ── Socket events ─────────────────────────────────────────────────────────
+  socket.on('connect', () => {
+    setConn('connected', '🟢 Connected to server');
+  });
+  socket.on('disconnect', () => {
+    setConn('disconnected', '🔴 Disconnected');
+    running = false;
+  });
+
+  socket.on('result', (data) => {
+    // Draw annotated frame
+    const img = new Image();
+    img.onload = () => {
+      canvas.width  = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = data.image;
+
+    // Update status cards
+    updateCard('drowsy', data.drowsy,    '😴 DROWSY!',  '👁️ Alert',    'DROWSY',   'Alert');
+    updateCard('yawn',   data.yawning,   '😮 YAWNING!', '😐 Normal',   'YAWNING',  `Yawns: ${data.yawns}`);
+    updateCard('phone',  data.phone,     '📱 PHONE!',   '📵 No Phone', 'PHONE!',   'No Phone');
+    updateCard('cig',    data.cigarette, '🚬 SMOKING!', '✅ No Smoke', 'SMOKING!', 'No Smoke');
+
+    // Metrics
+    document.getElementById('earVal').textContent  = data.ear.toFixed(3);
+    document.getElementById('marVal').textContent  = data.mar.toFixed(3);
+    document.getElementById('yawnVal').textContent = data.yawns;
+
+    // Score
+    document.getElementById('scoreNum').textContent = data.score;
+    document.getElementById('gradeSpan').textContent = data.grade;
+
+    // Alert banner
+    if (data.alerts && data.alerts.length > 0) {
+      showAlert(data.alerts[0]);
+      addLog(data.alerts[0]);
+    }
+
+    // FPS
+    frameCount++;
+    const now = Date.now();
+    if (now - lastFps >= 1000) {
+      document.getElementById('fpsBadge').textContent = frameCount + ' FPS';
+      frameCount = 0;
+      lastFps = now;
+    }
+
+    setConn('processing', '🟡 Processing...');
+    setTimeout(() => setConn('connected', '🟢 Connected'), 200);
+  });
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+      });
+      video.srcObject = stream;
+      await video.play();
+      document.getElementById('statusOverlay').textContent = '📷 Camera active';
+      return true;
+    } catch (e) {
+      alert('Camera access denied. Please allow camera permission.');
+      return false;
+    }
+  }
+
+  async function flipCamera() {
+    facingMode = facingMode === 'user' ? 'environment' : 'user';
+    if (running) { await startCamera(); }
+    else         { await startCamera(); }
+  }
+
+  // ── Monitoring loop ───────────────────────────────────────────────────────
+  async function startMonitoring() {
+    const ok = await startCamera();
+    if (!ok) return;
+    running = true;
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('btnStop').disabled  = false;
+    sendFrame();
+  }
+
+  function stopMonitoring() {
+    running = false;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); }
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnStop').disabled  = true;
+    document.getElementById('statusOverlay').textContent = '📷 Stopped';
+  }
+
+  function sendFrame() {
+    if (!running) return;
+    // Capture frame from video
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = 640;
+    offscreen.height = 480;
+    const octx = offscreen.getContext('2d');
+    octx.drawImage(video, 0, 0, 640, 480);
+    const dataUrl = offscreen.toDataURL('image/jpeg', 0.7);
+    socket.emit('frame', { image: dataUrl });
+    // Send next frame after short delay (throttle to ~15 FPS to avoid overload)
+    setTimeout(sendFrame, 67);
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  function updateCard(id, active, activeIcon, safeIcon, activeVal, safeVal) {
+    const card = document.getElementById('card-' + id);
+    const val  = document.getElementById('val-' + id);
+    const icon = card.querySelector('.status-icon');
+    if (active) {
+      card.className = 'status-card danger';
+      icon.textContent = activeIcon.split(' ')[0];
+      val.textContent  = activeVal;
+    } else {
+      card.className = 'status-card safe';
+      icon.textContent = safeIcon.split(' ')[0];
+      val.textContent  = safeVal;
+    }
+  }
+
+  function showAlert(msg) {
+    const banner = document.getElementById('alertBanner');
+    banner.textContent = msg;
+    banner.classList.add('show');
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(() => banner.classList.remove('show'), 2000);
+    // Vibrate phone
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  }
+
+  function addLog(msg) {
+    const container = document.getElementById('logContainer');
+    const now = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="log-time">${now}</span><span>${msg}</span>`;
+    container.insertBefore(entry, container.firstChild);
+    if (container.children.length > 20) container.removeChild(container.lastChild);
+  }
+
+  function setConn(state, text) {
+    const dot  = document.getElementById('connDot');
+    const span = document.getElementById('connText');
+    dot.className = 'conn-dot ' + state;
+    span.textContent = text;
+  }
+
+  async function resetSession() {
+    await fetch('/reset');
+    document.getElementById('scoreNum').textContent  = '100';
+    document.getElementById('gradeSpan').textContent = 'A';
+    document.getElementById('logContainer').innerHTML = '';
+    document.getElementById('earVal').textContent  = '0.00';
+    document.getElementById('marVal').textContent  = '0.00';
+    document.getElementById('yawnVal').textContent = '0';
+    ['drowsy','yawn','phone','cig'].forEach(id => {
+      document.getElementById('card-'+id).className = 'status-card safe';
+    });
+  }
+
+  // ── Auto start camera preview on load ────────────────────────────────────
+  window.addEventListener('load', () => {
+    startCamera();
+  });
+</script>
+</body>
+</html>
