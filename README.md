@@ -1,162 +1,69 @@
-# 🚗 Driver Monitoring System
+# Mean Reversion + ADX Bot — Setup Guide
 
-> **Cairo University — Faculty of Computers & Artificial Intelligence**
-> Department of Artificial Intelligence | Graduation Project | 2025–2026
+## الخطوات
 
-A real-time AI-powered driver safety system that detects drowsiness, phone usage, and cigarette smoking using computer vision and deep learning.
-
----
-
-## 🎯 Features
-
-| Detection | Method | Alert |
-|-----------|--------|-------|
-| 😴 **Drowsiness** | Eye Aspect Ratio (EAR) + MediaPipe FaceMesh | Visual + Audio |
-| 📱 **Phone Usage** | YOLOv8 Object Detection (COCO) | Visual + Audio |
-| 🚬 **Cigarette Smoking** | YOLOv8 Fine-tuned Detection | Visual + Audio |
-
----
-
-## 🏗️ System Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Camera / Video Input                   │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              Frame Preprocessing (OpenCV)                │
-│         Resize │ Color Convert │ Mirror                  │
-└──────┬──────────────┬──────────────────┬────────────────┘
-       │              │                  │
-       ▼              ▼                  ▼
-┌────────────┐ ┌────────────┐  ┌─────────────────┐
-│ MediaPipe  │ │  YOLOv8n   │  │  YOLOv8 Custom  │
-│ FaceMesh   │ │   (COCO)   │  │  (Fine-tuned)   │
-│ Drowsiness │ │   Phone    │  │   Cigarette     │
-└─────┬──────┘ └─────┬──────┘  └────────┬────────┘
-      │              │                   │
-      └──────────────┴───────────────────┘
-                      │
-                      ▼
-         ┌────────────────────────┐
-         │     Alert Manager      │
-         │  Audio │ Visual │ Log  │
-         └────────────┬───────────┘
-                      │
-                      ▼
-         ┌────────────────────────┐
-         │   Streamlit Dashboard  │
-         │  Live Feed │ Stats │   │
-         └────────────────────────┘
-```
-
----
-
-## 🚀 Quick Start
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/YOUR_USERNAME/driver-monitoring-system.git
-cd driver-monitoring-system
-```
-
-### 2. Install dependencies
+### 1. تثبيت المكتبات
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the app
+### 2. إنشاء Demo Account على Bybit
+1. روح: https://testnet.bybit.com
+2. سجّل account جديد
+3. روح: Account → API Management
+4. اعمل API Key جديد وخلّيه Unified Trading
+5. انسخ الـ API Key والـ Secret
+
+### 3. تعديل الـ API Keys في bot.py
+```python
+API_KEY    = "your_key_here"
+API_SECRET = "your_secret_here"
+DEMO_MODE  = True   # خليه True للـ demo
+```
+
+### 4. تشغيل الـ Bot
 ```bash
-streamlit run app/streamlit_app.py
-```
+# تشغيل عادي
+python bot.py
 
-Then open `http://localhost:8501` in your browser.
-
----
-
-## 📁 Project Structure
-
-```
-driver-monitoring-system/
-│
-├── app/
-│   └── streamlit_app.py          # Main Streamlit application
-│
-├── models/
-│   ├── __init__.py
-│   ├── drowsiness_detector.py    # EAR-based drowsiness detection
-│   ├── object_detector.py        # YOLOv8 phone + cigarette detection
-│   ├── alert_manager.py          # Audio + visual alert system
-│   └── weights/
-│       └── cigarette.pt          # Fine-tuned YOLOv8 weights (download separately)
-│
-├── notebooks/
-│   ├── YOLOv8_Training.ipynb     # Train cigarette/phone detector on Colab
-│   └── Drowsiness_Evaluation.ipynb # EAR algorithm evaluation
-│
-├── data/
-│   └── download_datasets.py      # Dataset download scripts
-│
-├── tests/
-│   └── test_detectors.py         # Unit tests
-│
-├── report/                       # LaTeX/Word report files
-├── requirements.txt
-└── README.md
+# عرض الإحصائيات
+python bot.py stats
 ```
 
 ---
 
-## 🧠 Models & Datasets
+## ملاحظات مهمة
 
-### Drowsiness Detection
-- **Algorithm**: Eye Aspect Ratio (EAR) — Soukupová & Čech, 2016
-- **Landmarks**: MediaPipe FaceMesh (468 3D face landmarks)
-- **Dataset**: MRL Eye Dataset (84,898 images)
-- **Threshold**: EAR < 0.25 for 20 consecutive frames
+**Limit Orders فقط:**
+الـ bot بيستخدم Limit Orders مش Market Orders
+عشان يدفع 0.02% (Maker) بدل 0.05% (Taker)
 
-### Phone & Cigarette Detection
-- **Architecture**: YOLOv8n (nano) — 3.2M parameters
-- **Phone**: Pretrained on COCO (80 classes, includes 'cell phone')
-- **Cigarette**: Fine-tuned on Roboflow Smoking Detection Dataset (~2,000 images)
-- **Inference speed**: ~30 FPS on CPU, ~90 FPS on GPU
+**Circuit Breaker:**
+لو خسر 5% في آخر 10 صفقات → يوقف أسبوع تلقائياً
 
----
+**Position Size:**
+3.4% من الـ portfolio لكل صفقة (25% Kelly)
 
-## 📊 Results
-
-| Model | Accuracy | Precision | Recall | F1 | mAP@0.5 |
-|-------|----------|-----------|--------|----|---------|
-| Drowsiness (EAR) | 94.2% | 93.8% | 95.1% | 94.4% | — |
-| Phone (YOLOv8n) | — | 91.3% | 89.7% | 90.5% | 0.913 |
-| Cigarette (YOLOv8 FT) | — | 88.6% | 86.4% | 87.5% | 0.879 |
+**مدة الصفقة:**
+8 ساعات ثم إغلاق تلقائي
 
 ---
 
-## 📚 References
+## على الـ Cloud (بعد الـ testing)
 
-1. Soukupová, T., & Čech, J. (2016). Real-time eye blink detection using facial landmarks. *CVWW*.
-2. Jocher, G., et al. (2023). Ultralytics YOLOv8. https://github.com/ultralytics/ultralytics
-3. Lugaresi, C., et al. (2019). MediaPipe: A framework for building perception pipelines. *arXiv*.
-4. Lin, T. Y., et al. (2014). Microsoft COCO: Common objects in context. *ECCV*.
-5. MRL Eye Dataset. http://mrl.cs.vsb.cz/eyedataset
+```bash
+# DigitalOcean / VPS
+nohup python bot.py > output.log 2>&1 &
 
----
-
-## 👥 Team
-
-| Name | ID |
-|------|-----|
-| *Team Member 1* | *ID* |
-| *Team Member 2* | *ID* |
-| *Team Member 3* | *ID* |
-
-**Supervisor**: *Dr. Name*
-**Faculty**: Faculty of Computers and Artificial Intelligence — Cairo University
+# أو استخدم screen
+screen -S bot
+python bot.py
+# Ctrl+A then D للـ detach
+```
 
 ---
 
-## 📄 License
-Academic use only — Cairo University Graduation Project 2025–2026
+## الملفات
+- `bot.py` — الـ bot الرئيسي
+- `bot_log.txt` — logs مفصّلة
+- `trades.json` — سجل الصفقات والـ state
