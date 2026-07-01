@@ -1,7 +1,7 @@
 import cv2, numpy as np, os
 from ultralytics import YOLO
 
-CONF_THRESHOLD = 0.30
+CONF_THRESHOLD = 0.55
 
 class ObjectDetector:
     def __init__(self, cigarette_model_path=None):
@@ -15,7 +15,7 @@ class ObjectDetector:
             os.path.join(base,"weights","cigarette_model.pt"),
         ]:
             if os.path.exists(path):
-                self.cig_model = YOLO(path)
+                self.cig_model = None  # disabled
                 print(f"[OD] Smoking: {path}")
                 break
         phone_path = os.path.join(base,"weights","phone_cbam.pt")
@@ -24,7 +24,7 @@ class ObjectDetector:
             print(f"[OD] Phone: {phone_path}")
         self.phone_frames = 0
         self.cig_frames   = 0
-        self.CONFIRM_N    = 2
+        self.CONFIRM_N    = 4
 
     def detect(self, frame):
         phone_detected = False
@@ -66,7 +66,7 @@ class ObjectDetector:
             self.phone_frames = max(0, self.phone_frames - 1)
 
         try:
-            if self.cig_model:
+            if False:  # cig disabled for testing
                 cig_res = self.cig_model(frame, conf=CONF_THRESHOLD, verbose=False)[0]
                 for box in cig_res.boxes:
                     cls_name = self.cig_model.names[int(box.cls)].lower()

@@ -149,24 +149,21 @@ def on_frame(data):
                 gesture_frames=max(0,gesture_frames-1)
         except: pass
 
-        # Smoking + Vape
+        # Smoking + Vape — hand-to-mouth gesture
         smoke_detected=False; smoke_seen=False
         try:
-            if smoke_model:
-                s_res=smoke_model(frame,conf=0.30,verbose=False)[0]
-                for box in s_res.boxes:
-                    cls_id=int(box.cls)
-                    cls_name=smoke_model.names[cls_id]
-                    conf=float(box.conf)
-                    xyxy=box.xyxy[0].cpu().numpy().astype(int)
-                    x1,y1,x2,y2=xyxy
+            h_,w_=frame.shape[:2]
+            palm,wrist,idx_tip=get_hand_pos(frame)
+            if palm is not None:
+                mouth_y=h_*0.60
+                in_center=w_*0.20<palm[0]<w_*0.80
+                near_mouth=abs(palm[1]-mouth_y)<h_*0.25
+                if in_center and near_mouth:
                     smoke_seen=True; smoke_frames+=1
                     if smoke_frames>=CONFIRM_N:
                         smoke_detected=True
-                        color=(128,0,128) if cls_name=='smoking' else (255,0,128)
-                        cv2.rectangle(frame,(x1,y1),(x2,y2),color,2)
-                        cv2.putText(frame,f"{cls_name} {conf:.0%}",(x1,y1-8),
-                                   cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
+                        cv2.putText(frame,"SMOKING!",(10,h_-40),
+                                   cv2.FONT_HERSHEY_SIMPLEX,1.0,(255,0,128),3)
         except: pass
         if not smoke_seen: smoke_frames=max(0,smoke_frames-1)
 
